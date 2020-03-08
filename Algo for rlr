@@ -1,0 +1,11 @@
+Create 4 regions for 4 approaches
+Input the direction of flow for each region
+Input the virtual stop lines for each zone  ----------- to be done!!!!!!!!
+If the corner points move in the flow direction, detect them. The rest are as good as stationary.
+Stationary points/Total no.of points >= .85 ==> It's a red
+Detected moving points/Total no.of points >= .85 ==> It's a green
+We have red region and green regions
+
+Have to detect rlrs:
+1. Track corner points moving in the flow direction during red
+2. Create regions just outside the stop line and detect movement in the direction of flow for that region.

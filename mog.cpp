@@ -1,0 +1,240 @@
+#include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/video/video.hpp>
+#include "opencv2/core/opengl_interop.hpp"
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+using namespace std;
+using namespace cv;
+
+bool track=false;
+Point current;
+Mat duplicate;
+
+const Point** r;
+Point* p;
+int* PinR;
+int input=1;
+int pcount=0;					//point count
+int rcount=0;					// region count
+int i,j,nop;
+CvMemStorage* pstorage = cvCreateMemStorage(0);
+CvSeq* pseq = cvCreateSeq( CV_SEQ_ELTYPE_POINT, sizeof(CvSeq), sizeof(CvPoint), pstorage);
+CvMemStorage* rstorage = cvCreateMemStorage(0);
+CvSeq* rseq = cvCreateSeq( 0, sizeof(CvSeq), sizeof(CvPoint*), rstorage);
+CvMemStorage* nstorage = cvCreateMemStorage(0);
+CvSeq* nseq = cvCreateSeq( CV_32SC1, sizeof(CvSeq), sizeof(int), nstorage);
+CvPoint **tempp;
+CvPoint *t;
+static void onMouse( int event, int x, int y, int, void* parameter)
+{
+	if(input) {
+		Mat* image = (Mat*) parameter;
+		switch( event ){
+			case CV_EVENT_LBUTTONDOWN: {
+				//printf("I am here");
+				printf("%d %d\n",x,y);
+				current = Point(x,y);
+				pcount++;
+				cvSeqPush( pseq, &current );
+				*image = duplicate.clone();
+				track=false;
+				current = Point(x,y);
+				//points = &point;
+				circle(*image, current, 0, Scalar( 0, 0, 0 ), 4, 8, 0);
+				imshow("Original frame",*image);
+			break;	}
+		
+			case CV_EVENT_LBUTTONUP:
+				track=true;
+				printf("%d %d\n",x,y);
+			break;
+
+			case CV_EVENT_MOUSEMOVE: {
+			if(track) {
+				duplicate = (*image).clone();
+				//printf("%d %d %d %d\n",x,y,current.x, current.y);
+				Point temp = Point(x,y);
+				line(duplicate, current, temp, Scalar( 0, 0, 0 ), 1, 8, 0);
+				imshow("Original frame",duplicate);
+			}
+			break; }
+		}
+	}
+}
+
+int main(int argc, char** argv)
+{
+	// Open the video file
+	bool check = true;
+	int one=1;
+	CvCapture* capture = cvCreateFileCapture( argv[1] );
+	if (!capture) {
+		printf("cannot open file");
+		return 0;
+	}
+	// current video frame
+	Mat frame;
+	// foreground binary image
+	Mat foreground, foreground_shadows;
+	Mat background;
+	Mat IBackground=imread("bg.jpg");
+	namedWindow("Extracted Foreground");
+	namedWindow("Extracted Foreground with shadows");
+	namedWindow("Current background");
+	namedWindow("Original frame");
+	// The Mixture of Gaussian object
+	BackgroundSubtractorMOG2 mog(1000, 16, true);
+	mog.set("nmixtures", 3);
+	//mog.setBackgroundImage(IBackground);
+	// for all frames in video
+	frame=IBackground;
+	Mat mask = Mat(frame.rows,frame.cols,CV_8UC1);
+	imshow("Original frame",frame);
+	duplicate =frame.clone();
+	setMouseCallback( "Original frame", onMouse, &frame );
+	
+	// ---------------------------- Creating Regions to be omitted ---------------------------------///
+	int key;
+	while(check) {
+		key=waitKey(0);
+		printf("You pressed %d \n", key);
+		if(key==1048675) {                              // Small case C - 'c'
+			if(pcount>2) {
+				rcount++;
+				p = new Point[pseq->total];
+				cvCvtSeqToArray(pseq, p, CV_WHOLE_SEQ);
+				track=false;
+				duplicate =frame.clone();
+				line(duplicate, *(CV_GET_SEQ_ELEM(cv::Point, pseq, 0)), current, Scalar( 0, 0, 0 ), 1, 8, 0);
+				imshow("Original frame",duplicate);
+				cvSeqPush( nseq, &pcount );
+				cvSeqPush( rseq, &p );
+				p=NULL;
+				pcount=0;
+				cvClearSeq(pseq);
+			}
+		}
+		else {
+				cout << "You pressed Enter" << endl;
+				check=false;
+				input=0;
+			}
+	}
+	////// ------------------------------------- END --------------------------------------------/////
+
+	/* input=0;
+	for(i=0;i<rcount;i++) {
+		tempp = CV_GET_SEQ_ELEM(CvPoint*, rseq, i);
+		nop = *(CV_GET_SEQ_ELEM(int, nseq, i));
+		printf("\n\n\n %d \n\n\n", nop);
+		t=*tempp;
+		for(j=0;j<nop;j++) {
+			printf("\n The points are : %d		%d", t[j].x, t[j].y);
+		} 
+		//printf("I am here %d %d %d %d %d", rcount, pcount, rseq->total, nseq->total, pseq->total);
+	}*/
+	bool stop(false);
+	bool pause(false);
+	r=(const Point**) new Point*[rcount];
+	PinR=new int[rcount];
+	cvCvtSeqToArray(rseq, r, CV_WHOLE_SEQ);
+	cvCvtSeqToArray(nseq, PinR, CV_WHOLE_SEQ);
+	vector<vector<Point> > contours;
+	Mat masked_frame, masked_foreground, canny_output, CMFrame;
+	Mat contour_mask = Mat::zeros(frame.rows, frame.cols, CV_8UC1);
+	mask=Scalar(1);
+	int thresh = 50;
+	int max_thresh = 255;
+	
+    if(pcount>0 || rcount>0) {
+		//fillPoly(mask, r, PinR, rcount, Scalar( 0, 0, 0 ), 8, 0);
+		fillPoly(mask, r, PinR, rcount, Scalar(0), 8, 0);
+	}
+	vector<Vec4i> hierarchy;
+	////-------------------------------- Displaying the extracted Foreground ----------------------------------------------//////////
+	while (!stop) {
+		// read next frame if any
+		if (!cvQueryFrame( capture ))
+			break;
+		if(pause) {
+			waitKey(0);
+			pause=false;
+		}
+		// update the background
+		// and return the foreground
+		frame.copyTo(masked_frame,mask);
+		mog(masked_frame,foreground_shadows,0.01);
+		mog.getBackgroundImage(background);
+		imshow("Current background",background);
+		imshow("Extracted Foreground with shadows",foreground_shadows);
+		threshold(foreground_shadows,foreground,126,255,THRESH_BINARY);				// Removing the Shadows
+		
+		masked_frame.copyTo(masked_foreground,foreground);
+		Mat masked_foreground_gray, norm, norm_scaled;
+		cvtColor(masked_foreground, masked_foreground_gray, CV_RGB2GRAY);
+		Mat harrisPoints(foreground.size(), CV_32FC1);
+
+		cornerHarris(masked_foreground_gray, harrisPoints, 5, 5, 1);
+		normalize(harrisPoints, norm, 0, 255, NORM_MINMAX, CV_32FC1, Mat());
+		convertScaleAbs(norm, norm_scaled);
+		// for(int j=0;j<norm.rows;j++) {
+		// 	for(int i=0;i<norm.cols;i++)
+		// 	{
+		// 		if((int) norm.at<float>(j,i) > thresh) {
+		// 			circle(norm_scaled, Point(i,j), 5, Scalar(0), 2, 8, 0);	
+		// 		}
+		// 	}
+		// }
+		Canny( foreground, canny_output, thresh, thresh*2.5, 5 );
+		//cv::findContours( foreground, contours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE );
+		cv::findContours( canny_output, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
+		//std::vector<std::vector<Point> > hull(contours.size());
+		std::vector<Rect> boundRect(contours.size());
+		//cv::drawContours( frame, contours, -1, cv::Scalar(255, 0, 0));
+		// for(int m=0;m<contours.size();m++) {
+		// 	convexHull(Mat(contours[m]), hull[m], false);
+		// }
+		for (size_t idx = 0; idx < contours.size(); idx++) {
+			if(contours[idx].size()>100) {
+				cv::drawContours(masked_frame, contours, idx, Scalar(0,0,255), CV_FILLED);
+				//cv::drawContours(foreground, hull, idx, Scalar(255), CV_FILLED);
+				//cv::drawContours(masked_frame, hull, idx, Scalar(255,0,0), 1);
+				cv::drawContours(contour_mask, contours, idx, Scalar(255), CV_FILLED);
+				//approxPolyDP(Mat(contours[idx]), contours_poly[idx], 3, true);
+				//boundRect[idx]=boundingRect(Mat(contours_poly[idx]));
+				//rectangle(masked_frame,boundRect[idx].tl(),boundRect[idx].br(),Scalar(0,0,255),2,8,0);
+			}
+    	}
+    	//Mat element = getStructuringElement(MORPH_RECT, Size(3,3), Point(2,2));
+		//erode(foreground, foreground, element, Point(-1,-1), 2);
+		//dilate(foreground, foreground, element, Point(-1,-1), 3);
+		// namedWindow( "Contours", CV_WINDOW_AUTOSIZE );
+		masked_frame.copyTo(CMFrame, contour_mask);
+		imshow("Contours", CMFrame);
+ 		imshow("edges", canny_output);
+		imshow("Extracted Foreground",foreground);
+		imshow("Original frame",masked_frame);
+		imshow("Masked Foreground", masked_foreground);
+		imshow("Harris Points", masked_foreground_gray);
+		masked_foreground=Scalar(0);
+		CMFrame=Scalar(0);
+		contour_mask=Scalar(0);
+		frame = cvQueryFrame( capture );
+		// press key to stop
+		if(waitKey(10)==1048608)					// Space bar
+			pause= true;
+		else if(waitKey(10)==1048603){				// Escape key (hold the key)
+			stop=true;
+		}
+	}
+	cvDestroyAllWindows();
+	cvReleaseCapture(&capture);
+	cvReleaseMemStorage( &pstorage );
+	cvReleaseMemStorage( &rstorage );
+	cvReleaseMemStorage( &nstorage );
+	imwrite("bg.jpg", background);
+	///////// ----------------------------------------------------END-----------------------------------------//////////////////////
+}

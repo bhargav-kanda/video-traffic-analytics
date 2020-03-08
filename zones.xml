@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<opencv_storage>
+<redZone>
+  <NofR>1</NofR>
+  <region1>
+    <NofP>10</NofP>
+    <point1>
+      <X>269</X>
+      <Y>169</Y></point1>
+    <point2>
+      <X>455</X>
+      <Y>167</Y></point2>
+    <point3>
+      <X>424</X>
+      <Y>144</Y></point3>
+    <point4>
+      <X>461</X>
+      <Y>137</Y></point4>
+    <point5>
+      <X>445</X>
+      <Y>120</Y></point5>
+    <point6>
+      <X>361</X>
+      <Y>98</Y></point6>
+    <point7>
+      <X>297</X>
+      <Y>79</Y></point7>
+    <point8>
+      <X>274</X>
+      <Y>59</Y></point8>
+    <point9>
+      <X>255</X>
+      <Y>60</Y></point9>
+    <point10>
+      <X>264</X>
+      <Y>162</Y></point10></region1></redZone>
+</opencv_storage>
